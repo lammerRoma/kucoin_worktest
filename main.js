@@ -4,6 +4,7 @@ const http = require("http");
 
 class App {
 
+  arr = [];
   ws = {};
   heartbeat = {};
   ask;
@@ -48,15 +49,15 @@ class App {
       this.ws[topic] = ws;
       ws.on('open', () => {
         console.log(topic + ' opening websocket connection... ');
-        this.subscribe(topic, endpoint);
-        this.ws[topic].heartbeat = setInterval( this.socketHeartBeat.bind(this), 2000, topic);
+        this.subscribe(topic, endpoint)
+          .then( res => console.log(res))
+        this.ws[topic].heartbeat = setInterval( this.socketHeartBeat.bind(this), 20000, topic);
       })
       ws.on('error', (error) => {
         this.handleSocketError(error);
         console.log(error);
       })
       ws.on('ping', () => {
-        console.log('work')
         return
       })
       ws.on('close', () => {
@@ -93,8 +94,8 @@ class App {
     }))
     
     ws.on('message', msg => {
-      console.log(msg)   
-    })
+      return msg
+    }) 
   }
 
   unsubscribe = async function(topic, endpoint, eventHandler) {
@@ -106,7 +107,7 @@ class App {
       response: true
     }))
     ws.on('message', msg => {
-      console.log(`Unubscribe msg: Best ask { ${msg.data.bestAsk} } Best bid { ${msg.data.bestBid} }`)
+      console.log('Unubscribe ');
     })
   }
 
