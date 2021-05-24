@@ -1,18 +1,25 @@
 const WebSocket = require('ws');
 const axios = require('axios');
-const http = require("http");
+
+const LinkedList = require('./linkedList') 
 
 class App {
+  localOrderBook = null;
+  cachedData = {
+    data: []
+  }
+  
+    
 
-  arr = [];
   ws = {};
   heartbeat = {};
-  ask;
-  bid;
+  symbol1;
+  symbol2;
+  
 
-  constructor(ask, bid) {
-  this.ask = ask;
-  this.bid = bid;
+  constructor(symbol1, symbol2) {
+  this.symbol1 = symbol1;
+  this.symbol2 = symbol2;
   }
 
   getPublicWsToken = async function () {
@@ -40,18 +47,32 @@ class App {
 
     try {
       
-      const endpoint = `/market/level2:${this.ask}-${this.bid}`;
+      const endpoint = `/market/level2:${this.symbol1}-${this.symbol2}`;
       const topic = 'orderbook';
       const type = 'public';
 
-      let websocket = await this.getSocketEndpoint()
+      let websocket = await this.getSocketEndpoint();
       const ws = new WebSocket(websocket); 
       this.ws[topic] = ws;
+      
       ws.on('open', () => {
         console.log(topic + ' opening websocket connection... ');
-        this.subscribe(topic, endpoint)
-          .then( res => console.log(res))
+         
+        ws.on('message', (msg) => {
+          const msgObj = JSON.parse(msg);
+          
+          this.cacheData(msgObj);
+          this.updateLocalOrderBook();
+         
+        })
+
+        this.subscribe(topic, endpoint);
+        this.setOrderBook();
+        this.updateLocalOrderBook();
+        setInterval(this.showLog.bind(this), 500);
+
         this.ws[topic].heartbeat = setInterval( this.socketHeartBeat.bind(this), 20000, topic);
+        // setTimeout( this.unsubscribe.bind(this), 10000, topic, endpoint);
       })
       ws.on('error', (error) => {
         this.handleSocketError(error);
@@ -83,7 +104,7 @@ class App {
     ws.ping()
   }
 
-  subscribe = async function(topic, endpoint) {
+  subscribe = function(topic, endpoint) {
     let ws = this.ws[topic]
 
     ws.send(JSON.stringify({
@@ -92,31 +113,95 @@ class App {
       topic: endpoint,
       response: true
     }))
-    
-    ws.on('message', msg => {
-      return msg
-    }) 
   }
 
-  unsubscribe = async function(topic, endpoint, eventHandler) {
+  unsubscribe = function(topic, endpoint) {
     let ws = this.ws[topic]
+
     ws.send(JSON.stringify({
       id: Date.now(),
       type: 'unsubscribe',
       topic: endpoint,
+      privateChannel: false,
       response: true
     }))
-    ws.on('message', msg => {
-      console.log('Unubscribe ');
-    })
+    console.log('unsubscribe')
   }
 
-  eventHandler = function () {
-    
+  setOrderBook = async function () {
+    const orderBook = await axios.get('https://api.kucoin.com/api/v1/market/orderbook/level2_20?symbol=BTC-USDT')
+    this.localOrderBook = new LinkedList(orderBook)
   }
+
+  cacheData = function (msg) {
+    if (msg.data) {
+      if (msg.data.changes){
+        if (msg.data.changes.asks != '') {
+          const list = 'asksLinkedList'
+          let data = msg.data.changes.asks[0]
+          data.push(list)
+          this.cachedData.data.push(data);
+        }
+        if (msg.data.changes.bids != '') {
+          const list = 'bidsLinkedList'
+          let data = msg.data.changes.bids[0]
+          data.push(list)
+          this.cachedData.data.push(data);
+        }
+      }
+    }
+  }
+
+  updateLocalOrderBook = function () {
+    
+    if ( this.localOrderBook ) {
+ 
+      let sequence = this.localOrderBook.sequence;
+      this.cachedData.data.forEach(el => {
+        if (el[2] > sequence) {
+          
+          const price = el[0];
+          const size = el[1];
+          const sequence = el[2];
+          const list = el[3];
+
+          if (price == 0) {
+            this.localOrderBook.sequence = sequence;
+            this.cachedData.data.splice(el, 1)
+          } else if (size == 0) {
+            this.localOrderBook.sequence = sequence;
+            this.localOrderBook.deleteNode(price, list);
+            this.cachedData.data.splice(el, 1)
+          } else {
+            this.localOrderBook.sequence = sequence;
+            this.localOrderBook.updatePrice(price, size, list);
+            this.cachedData.data.splice(el, 1)
+          }
+        }
+      })
+    }
+
+  }
+
+  showLog = function () {
+    if (this.localOrderBook) {
+      console.log(`The best Ask ${this.localOrderBook.asksLinkedList.tail.price}`)
+      console.log(`The best Bid ${this.localOrderBook.bidsLinkedList.head.price}`)
+    }
+  }
+
+  getData =  async function (res) {
+    if (this.localOrderBook){
+      const ask = this.localOrderBook.asksLinkedList.tail.price;
+      const bid = this.localOrderBook.bidsLinkedList.head.price;
+
+      const str = `Symbol ${this.symbol1} - ${this.symbol2}\n The BEST ask: ${ask} \n The BEST bid: ${bid}`
+
+      res.end(str)
+    } 
+  }
+
 }
 
 
-const app = new App('BTC','USDT')
-
-app.initSocket();
+module.exports = App;
