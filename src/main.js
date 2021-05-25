@@ -7,6 +7,7 @@ class App {
   }
 
   localOrderBook = {
+    status: 'stop',
     sequence: 0,
     bids: new Map(),
     asks: new Map()
@@ -62,15 +63,17 @@ class App {
          
         ws.on('message', (msg) => {
           const msgObj = JSON.parse(msg);
+          
+          
           this.cacheData(msgObj);
           this.updateLocalOrderBook();
-         
+          
         })
 
         this.subscribe(topic, endpoint);
         this.setOrderBook();
         this.updateLocalOrderBook();
-        setInterval(this.showLog.bind(this), 500);
+        // setInterval(this.showLog.bind(this), 500);
 
         this.ws[topic].heartbeat = setInterval( this.socketHeartBeat.bind(this), 20000, topic);
         // setTimeout( this.unsubscribe.bind(this), 10000, topic, endpoint);
@@ -141,23 +144,27 @@ class App {
     asks.forEach ( el => {
       this.localOrderBook.asks.set(el[0], el[1])
     })
+    this.localOrderBook.status = 'ready'
   }
 
   cacheData = function (msg) {
     if (msg.data) {
       if (msg.data.changes){
-        if (msg.data.changes.asks != '') {
+        if (msg.data.changes.asks.length !== 0) {
           const list = 'asks'
-          let data = msg.data.changes.asks[0]
-          data.push(list)
-          this.cachedData.data.push(data);
+          for (let i = 0; i < msg.data.changes.asks.length; i++) {
+            let data = msg.data.changes.asks[i];
+            data.push(list);
+            this.cachedData.data.push(data);
+          }
         }
-        if (msg.data.changes.bids != '') {
+        if (msg.data.changes.bids.length !== 0) {
           const list = 'bids'
-
-          let data = msg.data.changes.bids[0]
-          data.push(list)
-          this.cachedData.data.push(data);
+          for (let i = 0; i < msg.data.changes.bids.length; i++) {
+            let data = msg.data.changes.bids[i];
+            data.push(list);
+            this.cachedData.data.push(data);
+          }
         }
       }
     }
@@ -165,29 +172,36 @@ class App {
 
   updateLocalOrderBook = function () {
     
-    if ( this.localOrderBook ) {
- 
+    if ( this.localOrderBook.status == 'ready' ) {
       let sequence = this.localOrderBook.sequence;
       this.cachedData.data.forEach(el => {
-        if ( el[2] > sequence ) {
-          
+
+      if ( el[2] > sequence ) {
+        if ( sequence == el[2] - 1){
           const price = el[0];
           const size = el[1];
           const sequence = el[2];
           const list = el[3];
 
-          if (price == 0) {
-            this.localOrderBook.sequence = sequence;
-            this.cachedData.data.splice(el, 1)
-          } else if (size == 0) {
-            this.localOrderBook.sequence = sequence;
-            this.localOrderBook[list].delete(price);
-            this.cachedData.data.splice(el, 1)
+        if (price == 0) {
+          this.localOrderBook.sequence = sequence;
+          this.cachedData.data.splice(el, 1)
+        } else if (size == 0) {
+          this.localOrderBook.sequence = sequence;
+          this.localOrderBook[list].delete(price);
+          this.cachedData.data.splice(el, 1)
           } else {
-            this.localOrderBook.sequence = sequence;
-            this.localOrderBook[list].set(price, size)
-            this.cachedData.data.splice(el, 1)
+          this.localOrderBook.sequence = sequence;
+          this.localOrderBook[list].set(price, size)
+          this.cachedData.data.splice(el, 1)
           }
+          } else {
+          this.localOrderBook.status = 'stop';
+          this.setOrderBook();
+          } 
+          
+        } else {
+          this.cachedData.data.splice(el, 1)
         }
       })
     }
@@ -195,28 +209,35 @@ class App {
   }
 
   getBestAskBid = function () {
-    if (this.localOrderBook.sequence != 0) {
-      let asksArr = [...this.localOrderBook.asks]
-        .map(e => { return e[0] })
-        .slice().sort( (a, b) => {
-          return a - b;
-        })
-       
-      let bidsArr = [...this.localOrderBook.bids]
-        .map(e => { return e[0] })
-        .slice().sort( (a, b) => {
-          return b - a;
-        })
 
-      let bestAsk = asksArr[0];
-      let bestBids = bidsArr[0];
+    if (this.localOrderBook.status == 'ready') {
+      let askPrices = [];
+      let bidPrices = [];
+      for(let el of this.localOrderBook.asks.keys()){
+        
+        askPrices.push(el)
+      }
 
-      return [bestAsk, bestBids];
+      for(let el of this.localOrderBook.bids.keys()){
+        bidPrices.push(el)
+      }
 
-    }
+      askPrices.sort( (a, b) => {return a - b})
+      bidPrices.sort( (a, b) => {return b - a})
+      console.log(bidPrices)
+
+      
+
+      let bestAsk = askPrices[0];
+      let bestBid = bidPrices[0];
+
+      return [bestAsk, bestBid];
+
+    } else return ['No date', 'No date']
   }
 
   showLog = function()  {
+
     const [bestAsk, bestBid] = this.getBestAskBid();
 
     console.log(`The best ask: ${bestAsk}`)
@@ -224,12 +245,13 @@ class App {
   } 
 
   getBestAskBidForClient =  function (res) {
-    if (this.localOrderBook){
+    if (this.localOrderBook.status == 'ready'){
     
       const [ask, bid] = this.getBestAskBid();
 
       const askSize = this.localOrderBook.asks.get(ask);
       const bidSize = this.localOrderBook.bids.get(bid);
+
 
       const str = `Symbol ${this.symbol1} - ${this.symbol2}\n 
         The BEST ask: ${ask} Size: ${askSize} \n 
@@ -238,7 +260,7 @@ class App {
       res.end(str);  
     
     } else {
-      res.end('Попробуйте попозже');
+      res.end('No date');
     }
   }
 
