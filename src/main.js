@@ -1,16 +1,17 @@
 const WebSocket = require('ws');
 const axios = require('axios');
 
-const LinkedList = require('./linkedList') 
-
 class App {
-  localOrderBook = null;
   cachedData = {
     data: []
   }
-  
-    
 
+  localOrderBook = {
+    sequence: 0,
+    bids: new Map(),
+    asks: new Map()
+  }
+  
   ws = {};
   heartbeat = {};
   symbol1;
@@ -18,6 +19,7 @@ class App {
   
 
   constructor(symbol1, symbol2) {
+ 
   this.symbol1 = symbol1;
   this.symbol2 = symbol2;
   }
@@ -60,7 +62,6 @@ class App {
          
         ws.on('message', (msg) => {
           const msgObj = JSON.parse(msg);
-          
           this.cacheData(msgObj);
           this.updateLocalOrderBook();
          
@@ -130,20 +131,30 @@ class App {
 
   setOrderBook = async function () {
     const orderBook = await axios.get('https://api.kucoin.com/api/v1/market/orderbook/level2_20?symbol=BTC-USDT')
-    this.localOrderBook = new LinkedList(orderBook)
+    const bids = orderBook.data.data.bids;
+    const asks = orderBook.data.data.asks;
+    this.localOrderBook.sequence = orderBook.data.data.sequence;
+    bids.forEach ( el => {
+      this.localOrderBook.bids.set(el[0], el[1])
+      
+    })
+    asks.forEach ( el => {
+      this.localOrderBook.asks.set(el[0], el[1])
+    })
   }
 
   cacheData = function (msg) {
     if (msg.data) {
       if (msg.data.changes){
         if (msg.data.changes.asks != '') {
-          const list = 'asksLinkedList'
+          const list = 'asks'
           let data = msg.data.changes.asks[0]
           data.push(list)
           this.cachedData.data.push(data);
         }
         if (msg.data.changes.bids != '') {
-          const list = 'bidsLinkedList'
+          const list = 'bids'
+
           let data = msg.data.changes.bids[0]
           data.push(list)
           this.cachedData.data.push(data);
@@ -158,7 +169,7 @@ class App {
  
       let sequence = this.localOrderBook.sequence;
       this.cachedData.data.forEach(el => {
-        if (el[2] > sequence) {
+        if ( el[2] > sequence ) {
           
           const price = el[0];
           const size = el[1];
@@ -170,11 +181,11 @@ class App {
             this.cachedData.data.splice(el, 1)
           } else if (size == 0) {
             this.localOrderBook.sequence = sequence;
-            this.localOrderBook.deleteNode(price, list);
+            this.localOrderBook[list].delete(price);
             this.cachedData.data.splice(el, 1)
           } else {
             this.localOrderBook.sequence = sequence;
-            this.localOrderBook.updatePrice(price, size, list);
+            this.localOrderBook[list].set(price, size)
             this.cachedData.data.splice(el, 1)
           }
         }
@@ -183,22 +194,52 @@ class App {
 
   }
 
-  showLog = function () {
-    if (this.localOrderBook) {
-      console.log(`The best Ask ${this.localOrderBook.asksLinkedList.tail.price}`)
-      console.log(`The best Bid ${this.localOrderBook.bidsLinkedList.head.price}`)
+  getBestAskBid = function () {
+    if (this.localOrderBook.sequence != 0) {
+      let asksArr = [...this.localOrderBook.asks]
+        .map(e => { return e[0] })
+        .slice().sort( (a, b) => {
+          return a - b;
+        })
+       
+      let bidsArr = [...this.localOrderBook.bids]
+        .map(e => { return e[0] })
+        .slice().sort( (a, b) => {
+          return b - a;
+        })
+
+      let bestAsk = asksArr[0];
+      let bestBids = bidsArr[0];
+
+      return [bestAsk, bestBids];
+
     }
   }
 
-  getData =  async function (res) {
+  showLog = function()  {
+    const [bestAsk, bestBid] = this.getBestAskBid();
+
+    console.log(`The best ask: ${bestAsk}`)
+    console.log(`The best bid: ${bestBid}`)
+  } 
+
+  getBestAskBidForClient =  function (res) {
     if (this.localOrderBook){
-      const ask = this.localOrderBook.asksLinkedList.tail.price;
-      const bid = this.localOrderBook.bidsLinkedList.head.price;
+    
+      const [ask, bid] = this.getBestAskBid();
 
-      const str = `Symbol ${this.symbol1} - ${this.symbol2}\n The BEST ask: ${ask} \n The BEST bid: ${bid}`
+      const askSize = this.localOrderBook.asks.get(ask);
+      const bidSize = this.localOrderBook.bids.get(bid);
 
-      res.end(str)
-    } 
+      const str = `Symbol ${this.symbol1} - ${this.symbol2}\n 
+        The BEST ask: ${ask} Size: ${askSize} \n 
+        The BEST bid: ${bid} Size: ${bidSize}`
+
+      res.end(str);  
+    
+    } else {
+      res.end('Попробуйте попозже');
+    }
   }
 
 }

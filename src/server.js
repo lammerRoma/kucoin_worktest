@@ -14,7 +14,7 @@ const server = http.createServer( (req, res) => {
   const pathName = reqUrl.pathname;
 
   if (pathName == '/get') {
-    app.getData(res);
+    app.getBestAskBidForClient(res);
   } 
 })
 

@@ -11,10 +11,12 @@ class LinkedListNode {
     constructor(orderBook) {
       this.sequence = orderBook.data.data.sequence;
       this.asksLinkedList = {
+        let: 0,
         head: null,
         tail:  null,
       }
       this.bidsLinkedList = {
+        let: 0,
         head: null,
         tail: null,
       }
@@ -37,6 +39,7 @@ class LinkedListNode {
   prepend(price, size, list) {
     const newNode = new LinkedListNode(price, size, this[list].head);
     this[list].head = newNode;
+    this[list].let++;
    
     if (!this[list].tail) {
       this[list].tail = newNode;
@@ -44,6 +47,7 @@ class LinkedListNode {
   }
 
   deleteNode(price, list) {
+    
 
     if (!this[list].head) {
       return null;
@@ -54,6 +58,7 @@ class LinkedListNode {
     if (this[list].head && this[list].head.price === price) {
       deletedNode = this[list].head; 
       this[list].head = this[list].head.next;
+      this[list].let--;
       return deletedNode;
     }
 
@@ -65,6 +70,7 @@ class LinkedListNode {
         if (currentNode.next.price === price) {
           deletedNode = currentNode.next;
           currentNode.next = currentNode.next.next;
+          this[list].let--;
           break;
         }
         currentNode = currentNode.next;
@@ -72,7 +78,6 @@ class LinkedListNode {
     }
 
     if (this[list].tail && this[list].tail === price) {
-      deletedNode = this[list].tail;
       this[list].tail = currentNode;
     }
     
@@ -102,14 +107,17 @@ class LinkedListNode {
   }
 
   addNewNode (price, size, list) {
-
+    
+    this[list].let++;
     if (this[list].head && this[list].head.price < price) {
+      // console.log(`Add head ${list}`)
       const newNode = new LinkedListNode(price, size, this[list].head)
       this[list].head = newNode
       return newNode;
     }
 
     if (this[list].tail && this[list].tail.price < price) {
+      // console.log(`Add tail ${list}`)
       const newNode = new LinkedListNode(price, size, null)
       this[list].tail.next = newNode
       this[list].tail = newNode;
@@ -121,6 +129,7 @@ class LinkedListNode {
     while(currentNode.next) {
       if (currentNode.next.price < price) {
         const newNode = new LinkedListNode(price, size, currentNode.next)
+        // console.log(`Add body ${list}`)
         currentNode.next = newNode;
         return newNode;
       }
