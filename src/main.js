@@ -203,7 +203,7 @@ class App {
 
           } else {
             this.localOrderBook.status = 'stop';
-            // this.timeoutLocalOrderBook();
+            this.timeoutLocalOrderBook();
           } 
         }
       }
