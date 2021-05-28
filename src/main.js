@@ -66,11 +66,12 @@ class App {
           const msgObj = JSON.parse(msg);
           this.cacheData(msgObj);
           this.updateLocalOrderBook();
+          this.showLog();
         })
 
         this.subscribe(topic, endpoint);
         this.timeoutLocalOrderBook();
-        setInterval(this.showLog.bind(this), 500);
+        // setInterval(this.showLog.bind(this), 500);
         
 
         this.ws[topic].heartbeat = setInterval( this.socketHeartBeat.bind(this), 20000, topic);
