@@ -64,14 +64,13 @@ class App {
          
         ws.on('message', (msg) => {
           const msgObj = JSON.parse(msg);
-          
           this.cacheData(msgObj);
           this.updateLocalOrderBook();
         })
 
         this.subscribe(topic, endpoint);
         this.timeoutLocalOrderBook();
-         setInterval(this.showLog.bind(this), 500);
+        setInterval(this.showLog.bind(this), 500);
         
 
         this.ws[topic].heartbeat = setInterval( this.socketHeartBeat.bind(this), 20000, topic);
@@ -180,39 +179,35 @@ class App {
 
   updateLocalOrderBook = function () {
     if ( this.localOrderBook.status == 'ready' && this.cachedData.status == 'free' ) {
+      
       this.cachedData.status = 'work'
-      let sequence = parseInt(this.localOrderBook.sequence);
-      for (const [i, el] of this.cachedData.data.entries()) {  
-        if ( parseInt(el[2]) > sequence ) {
-          if ( sequence == parseInt(el[2]) - 1){
-
-            const price = el[0];
-            const size = el[1];
-            const sequence = el[2];
-            const list = el[3];
+      for (let i = 0; i < this.cachedData.data.length; i++) { 
+        let orderBookSequence = parseInt(this.localOrderBook.sequence);
+        if ( parseInt(this.cachedData.data[i][2]) > orderBookSequence) {
+          if ( orderBookSequence == parseInt(this.cachedData.data[i][2]) - 1){
+            
+            const price = this.cachedData.data[i][0];
+            const size = this.cachedData.data[i][1];
+            const sequence = this.cachedData.data[i][2];
+            const list = this.cachedData.data[i][3];
 
             if (price == 0) {
               this.localOrderBook.sequence = sequence;
-              this.cachedData.data.splice(i, 1)
             } else if (size == 0) {
               this.localOrderBook.sequence = sequence;
               this.localOrderBook[list].delete(price);
-              this.cachedData.data.splice(i, 1)
             } else {
               this.localOrderBook.sequence = sequence;
               this.localOrderBook[list].set(price, size)
-              this.cachedData.data.splice(i, 1)
             }
 
           } else {
             this.localOrderBook.status = 'stop';
-            this.timeoutLocalOrderBook();
+            // this.timeoutLocalOrderBook();
           } 
-        } else {
-          // console.log(`Удален  ${el}`)
-          this.cachedData.data.splice(i, 1)
         }
       }
+      this.cachedData.length = 0;
       this.cachedData.status = 'free'
     }
 
