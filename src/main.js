@@ -3,6 +3,7 @@ const axios = require('axios');
 
 class App {
   cachedData = {
+    status: 'free',
     data: []
   }
 
@@ -64,16 +65,14 @@ class App {
         ws.on('message', (msg) => {
           const msgObj = JSON.parse(msg);
           
-          
           this.cacheData(msgObj);
           this.updateLocalOrderBook();
-          
         })
 
         this.subscribe(topic, endpoint);
-        this.setOrderBook();
-        this.updateLocalOrderBook();
-        // setInterval(this.showLog.bind(this), 500);
+        this.timeoutLocalOrderBook();
+         setInterval(this.showLog.bind(this), 500);
+        
 
         this.ws[topic].heartbeat = setInterval( this.socketHeartBeat.bind(this), 20000, topic);
         // setTimeout( this.unsubscribe.bind(this), 10000, topic, endpoint);
@@ -133,19 +132,28 @@ class App {
   }
 
   setOrderBook = async function () {
-    const orderBook = await axios.get('https://api.kucoin.com/api/v1/market/orderbook/level2_20?symbol=BTC-USDT')
-    const bids = orderBook.data.data.bids;
-    const asks = orderBook.data.data.asks;
-    this.localOrderBook.sequence = orderBook.data.data.sequence;
-    bids.forEach ( el => {
+    try {
+      const orderBook = await axios
+        .get(`https://api.kucoin.com/api/v1/market/orderbook/level2_100?symbol=${this.symbol1}-${this.symbol2}`)
+      const bids = orderBook.data.data.bids;
+      const asks = orderBook.data.data.asks;
+      this.localOrderBook.sequence = orderBook.data.data.sequence;
+      bids.forEach ( el => {
       this.localOrderBook.bids.set(el[0], el[1])
       
     })
-    asks.forEach ( el => {
+      asks.forEach ( el => {
       this.localOrderBook.asks.set(el[0], el[1])
-    })
-    this.localOrderBook.status = 'ready'
+      })
+      this.localOrderBook.status = 'ready'
+    } catch (error) {
+      console.log(error)
+    }
   }
+
+  timeoutLocalOrderBook = function() {
+    setTimeout( this.setOrderBook.bind(this), 1000);
+  }  
 
   cacheData = function (msg) {
     if (msg.data) {
@@ -171,39 +179,41 @@ class App {
   }
 
   updateLocalOrderBook = function () {
-    
-    if ( this.localOrderBook.status == 'ready' ) {
-      let sequence = this.localOrderBook.sequence;
-      this.cachedData.data.forEach(el => {
+    if ( this.localOrderBook.status == 'ready' && this.cachedData.status == 'free' ) {
+      this.cachedData.status = 'work'
+      let sequence = parseInt(this.localOrderBook.sequence);
+      for (const [i, el] of this.cachedData.data.entries()) {  
+        if ( parseInt(el[2]) > sequence ) {
+          if ( sequence == parseInt(el[2]) - 1){
 
-      if ( el[2] > sequence ) {
-        if ( sequence == el[2] - 1){
-          const price = el[0];
-          const size = el[1];
-          const sequence = el[2];
-          const list = el[3];
+            const price = el[0];
+            const size = el[1];
+            const sequence = el[2];
+            const list = el[3];
 
-        if (price == 0) {
-          this.localOrderBook.sequence = sequence;
-          this.cachedData.data.splice(el, 1)
-        } else if (size == 0) {
-          this.localOrderBook.sequence = sequence;
-          this.localOrderBook[list].delete(price);
-          this.cachedData.data.splice(el, 1)
+            if (price == 0) {
+              this.localOrderBook.sequence = sequence;
+              this.cachedData.data.splice(i, 1)
+            } else if (size == 0) {
+              this.localOrderBook.sequence = sequence;
+              this.localOrderBook[list].delete(price);
+              this.cachedData.data.splice(i, 1)
+            } else {
+              this.localOrderBook.sequence = sequence;
+              this.localOrderBook[list].set(price, size)
+              this.cachedData.data.splice(i, 1)
+            }
+
           } else {
-          this.localOrderBook.sequence = sequence;
-          this.localOrderBook[list].set(price, size)
-          this.cachedData.data.splice(el, 1)
-          }
-          } else {
-          this.localOrderBook.status = 'stop';
-          this.setOrderBook();
+            this.localOrderBook.status = 'stop';
+            this.timeoutLocalOrderBook();
           } 
-          
         } else {
-          this.cachedData.data.splice(el, 1)
+          // console.log(`Удален  ${el}`)
+          this.cachedData.data.splice(i, 1)
         }
-      })
+      }
+      this.cachedData.status = 'free'
     }
 
   }
@@ -213,8 +223,8 @@ class App {
     if (this.localOrderBook.status == 'ready') {
       let askPrices = [];
       let bidPrices = [];
+
       for(let el of this.localOrderBook.asks.keys()){
-        
         askPrices.push(el)
       }
 
@@ -224,7 +234,6 @@ class App {
 
       askPrices.sort( (a, b) => {return a - b})
       bidPrices.sort( (a, b) => {return b - a})
-      console.log(bidPrices)
 
       
 
