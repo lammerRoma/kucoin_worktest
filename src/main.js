@@ -66,12 +66,11 @@ class App {
           const msgObj = JSON.parse(msg);
           this.cacheData(msgObj);
           this.updateLocalOrderBook();
-          this.showLog();
         })
 
         this.subscribe(topic, endpoint);
         this.timeoutLocalOrderBook();
-        // setInterval(this.showLog.bind(this), 500);
+        setInterval(this.showLog.bind(this), 100);
         
 
         this.ws[topic].heartbeat = setInterval( this.socketHeartBeat.bind(this), 20000, topic);
@@ -182,6 +181,7 @@ class App {
     if ( this.localOrderBook.status == 'ready' && this.cachedData.status == 'free' ) {
       
       this.cachedData.status = 'work'
+
       for (let i = 0; i < this.cachedData.data.length; i++) { 
         let orderBookSequence = parseInt(this.localOrderBook.sequence);
         if ( parseInt(this.cachedData.data[i][2]) > orderBookSequence) {
@@ -207,8 +207,9 @@ class App {
             this.timeoutLocalOrderBook();
           } 
         }
+        
       }
-      this.cachedData.length = 0;
+      this.cachedData.data.length = 0;
       this.cachedData.status = 'free'
     }
 
